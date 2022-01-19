@@ -3,12 +3,13 @@ from odoo import http
 import json
 from odoo.tools import date_utils
 import collections
+from . import payme
 
 
 MINIO_URL = "http://192.168.1.107:9000/images"
 
 class CustomApi(http.Controller):
-    @http.route('/custom-api/product.product', auth='public', type='http', methods=['GET'])
+    @http.route('/custom-api/product.product', auth='public', type='http', methods=['GET'], cors="*")
     def get_products(self, **kw):
         limit = int(kw.get('limit', 10))
         page = int(kw.get('page', 1))
@@ -55,7 +56,7 @@ class CustomApi(http.Controller):
             },
         ensure_ascii=False).encode('utf8'), headers = {'Content-Type': 'application/json'})
     
-    @http.route('/custom-api/product.product/<model("product.product"):item>', auth='public', type='http', methods=['GET'])
+    @http.route('/custom-api/product.product/<model("product.product"):item>', auth='public', type='http', methods=['GET'], cors="*")
     def get_single_product(self, item, **kw):
         thumbs = []
         images = http.request.env['product.custom.image'].search([('product_id', '=', item.id)])
@@ -84,7 +85,7 @@ class CustomApi(http.Controller):
         }
         return http.Response(json.dumps(result, ensure_ascii=False).encode('utf8'), headers = {'Content-Type': 'application/json'})
 
-    @http.route(route="/custom-api/order", type='json', methods=["POST"], auth="user", csrf=False)
+    @http.route(route="/custom-api/order", type='json', methods=["POST"], auth="user", cors="*")
     def create_order(self, **kw):
         params = http.request.params
 
@@ -111,11 +112,13 @@ class CustomApi(http.Controller):
                 'order_partner_id': user_id,
             })
             
+        order_name = "S" + f"{sale_count+1}".zfill(6)
+        
         values = [{
-            "name": f"S{sale_count+1}",
-            "reference": f"S{sale_count+1}",
+            "name": order_name,
+            "reference": order_name,
             "access_token": session_id,
-            "state": params['state'],
+            "state": 'sent',
             "user_id": user_id,
             "partner_id": user_id,
             "partner_invoice_id": user_id,
@@ -130,9 +133,13 @@ class CustomApi(http.Controller):
             item.update({'order_id': new_order[0]['id']})
         
         order_line = http.request.env['sale.order.line'].create(products)
-        return {"success": True}
+        
+        values[0]['id'] = new_order[0]['id']
+        values[0]['order_line'] = products
+        
+        return values[0]
     
-    @http.route(route='/custom-api/order/<model("sale.order"):order_item>', type='json', methods=["PATCH"], auth="user", csrf=False)
+    @http.route(route='/custom-api/order/<model("sale.order"):order_item>', type='json', methods=["PATCH"], auth="user", cors="*")
     def order_update(self, order_item, *args, **kwargs):    
         params = http.request.params
         
@@ -144,7 +151,7 @@ class CustomApi(http.Controller):
         
         return {"success": True}
     
-    @http.route(route='/custom-api/order/<model("sale.order"):order_item>', type='json', methods=["GET"], auth="user", csrf=False)
+    @http.route(route='/custom-api/order/<model("sale.order"):order_item>', type='json', methods=["GET"], auth="user", cors="*")
     def get_order(self, order_item, *args, **kwargs):
         order_line = []
         for item in order_item['order_line']:
@@ -206,7 +213,7 @@ class CustomApi(http.Controller):
         }
         return result
     
-    @http.route(route="/custom-api/order", type='json', methods=["GET"], auth="user", csrf=False)
+    @http.route(route="/custom-api/order", type='json', methods=["GET"], auth="user", cors="*")
     def get_order_list(self, *args, **kwargs):
         limit = int(kwargs.get('limit', 10))
         page = int(kwargs.get('page', 1))
@@ -285,3 +292,9 @@ class CustomApi(http.Controller):
             "count": count,
             "page": page
             })
+
+
+
+# class Payme(http.Controller):   
+#     def __init__(self) -> None:
+#         super().__init__()
